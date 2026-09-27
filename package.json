@@ -1,0 +1,7 @@
+{
+  "name": "scan2attend",
+  "private": true,
+  "scripts": {
+    "dev": "node scripts/dev.js"
+  }
+}
