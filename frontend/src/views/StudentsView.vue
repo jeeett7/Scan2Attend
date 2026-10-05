@@ -107,7 +107,7 @@ async function addStudent() {
 
 async function deleteStudent(student) {
   const confirmed = window.confirm(
-    `Deactivate ${student.firstName} ${student.lastName}?`
+    `Permanently delete ${student.firstName} ${student.lastName}? This cannot be undone.`
   )
 
   if (!confirmed) {
@@ -127,7 +127,7 @@ async function deleteStudent(student) {
     await loadStudents()
   } catch (error) {
     showMessage(
-      error.response?.data?.message || 'Could not deactivate the student.',
+      error.response?.data?.message || 'Could not permanently delete the student.',
       'error'
     )
   } finally {

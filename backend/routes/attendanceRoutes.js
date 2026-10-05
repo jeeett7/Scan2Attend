@@ -10,7 +10,7 @@ const {
 const router = express.Router()
 
 const SESSION_LENGTH_MS = 60 * 1000
-const QR_INTERVAL_MS = 5 * 1000
+const QR_INTERVAL_MS = 10 * 1000
 
 const startSessionSchema = z.object({
   teacherAssignmentId: z.coerce.number().int().positive()
@@ -102,7 +102,30 @@ async function getTeacherSession(sessionPublicId, userId) {
     [sessionPublicId, userId]
   )
 
-  return sessions[0] || null
+  const session = sessions[0] || null
+
+  if (!session) {
+    return null
+  }
+
+  const [recentMarks] = await dbPool.execute(
+    `SELECT
+      attendance_records.id AS recordId,
+      students.first_name AS firstName,
+      students.last_name AS lastName,
+      students.student_code AS studentCode,
+      attendance_records.marked_at AS markedAt
+    FROM attendance_records
+    INNER JOIN students ON students.id = attendance_records.student_id
+    WHERE attendance_records.attendance_session_id = ?
+    ORDER BY attendance_records.marked_at ASC, attendance_records.id ASC`,
+    [session.sessionId]
+  )
+
+  return {
+    ...session,
+    recentMarks
+  }
 }
 
 async function getQrTokenForSession(session) {

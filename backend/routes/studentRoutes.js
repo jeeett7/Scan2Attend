@@ -49,6 +49,11 @@ async function getSubjectSummaries(studentId) {
       subjects.id AS subjectId,
       subjects.subject_code AS subjectCode,
       subjects.subject_name AS subjectName,
+      GROUP_CONCAT(
+        DISTINCT CONCAT(teachers.first_name, ' ', teachers.last_name)
+        ORDER BY teachers.first_name, teachers.last_name
+        SEPARATOR ', '
+      ) AS teacherNames,
       COUNT(DISTINCT attendance_sessions.id) AS sessionsHeld,
       COUNT(DISTINCT attendance_records.id) AS presentCount
     FROM student_subject_enrollments
@@ -58,6 +63,7 @@ async function getSubjectSummaries(studentId) {
     INNER JOIN subjects ON subjects.id = class_subjects.subject_id
     LEFT JOIN teacher_assignments
       ON teacher_assignments.class_subject_id = class_subjects.id
+    LEFT JOIN teachers ON teachers.id = teacher_assignments.teacher_id
     LEFT JOIN attendance_sessions
       ON attendance_sessions.teacher_assignment_id = teacher_assignments.id
       AND attendance_sessions.status IN ('ended', 'expired')

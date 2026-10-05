@@ -245,7 +245,12 @@ onBeforeUnmount(() => {
         }}
       </h1>
 
-      <p class="message">{{ message }}</p>
+      <p
+        class="message"
+        :class="{ 'error-message': status === 'error' }"
+      >
+        {{ message }}
+      </p>
 
       <div
         v-if="status === 'success' && attendance"
@@ -264,14 +269,6 @@ onBeforeUnmount(() => {
         Go to student login
       </button>
 
-      <button
-        v-if="status === 'error'"
-        class="secondary-button"
-        type="button"
-        @click="router.push('/')"
-      >
-        Go to login
-      </button>
     </section>
   </main>
 </template>
@@ -347,6 +344,11 @@ h1 {
   margin: 13px auto 0;
   color: #718087;
   line-height: 1.55;
+}
+
+.message.error-message {
+  color: #a64040;
+  font-weight: 800;
 }
 
 .attendance-details {

@@ -113,7 +113,7 @@ async function addTeacher() {
 
 async function deleteTeacher(teacher) {
   const confirmed = window.confirm(
-    `Deactivate ${teacher.firstName} ${teacher.lastName}?`
+    `Permanently delete ${teacher.firstName} ${teacher.lastName}? This cannot be undone.`
   )
 
   if (!confirmed) {
@@ -133,7 +133,7 @@ async function deleteTeacher(teacher) {
     await loadTeachers()
   } catch (error) {
     showMessage(
-      error.response?.data?.message || 'Could not deactivate the teacher.',
+      error.response?.data?.message || 'Could not permanently delete the teacher.',
       'error'
     )
   } finally {

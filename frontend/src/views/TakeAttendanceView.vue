@@ -21,9 +21,13 @@ const isCancelling = ref(false)
 const message = ref('')
 const messageType = ref('success')
 const secondsRemaining = ref(0)
+const displayedMark = ref(null)
 
 let countdownTimer = null
 let refreshTimer = null
+let markDisplayTimer = null
+const displayedMarkIds = new Set()
+const markQueue = []
 
 const selectedAssignment = computed(() => {
   return assignments.value.find(
@@ -57,9 +61,50 @@ function showMessage(text, type = 'success') {
 function stopTimers() {
   clearInterval(countdownTimer)
   clearInterval(refreshTimer)
+  clearTimeout(markDisplayTimer)
 
   countdownTimer = null
   refreshTimer = null
+  markDisplayTimer = null
+}
+
+function resetLiveMarks() {
+  displayedMark.value = null
+  displayedMarkIds.clear()
+  markQueue.length = 0
+  clearTimeout(markDisplayTimer)
+  markDisplayTimer = null
+}
+
+function showNextMarkedStudent() {
+  const nextMark = markQueue.shift()
+
+  if (!nextMark) {
+    markDisplayTimer = null
+    return
+  }
+
+  displayedMark.value = nextMark
+  markDisplayTimer = setTimeout(showNextMarkedStudent, 2000)
+}
+
+function queueMarkedStudents(marks = []) {
+  marks.forEach((mark) => {
+    if (!displayedMarkIds.has(mark.recordId)) {
+      displayedMarkIds.add(mark.recordId)
+      markQueue.push(mark)
+    }
+  })
+
+  if (!markDisplayTimer && markQueue.length > 0) {
+    showNextMarkedStudent()
+  }
+}
+
+function markedStudentName(mark) {
+  return [mark?.firstName, mark?.lastName]
+    .filter(Boolean)
+    .join(' ')
 }
 
 function updateCountdown() {
@@ -149,6 +194,7 @@ async function refreshSession() {
     )
 
     activeSession.value = response.data.session
+    queueMarkedStudents(activeSession.value.recentMarks)
     updateCountdown()
 
     if (activeSession.value.status !== 'active') {
@@ -196,7 +242,9 @@ async function startSession() {
       authHeaders()
     )
 
+    resetLiveMarks()
     activeSession.value = response.data.session
+    queueMarkedStudents(activeSession.value.recentMarks)
     await createQrImage(response.data.qrToken)
     startTimers()
 
@@ -269,6 +317,7 @@ async function cancelSession() {
     activeSession.value = null
     qrImage.value = ''
     isQrExpanded.value = false
+    resetLiveMarks()
     stopTimers()
     showMessage(response.data.message)
   } catch (error) {
@@ -283,7 +332,10 @@ async function cancelSession() {
 }
 
 onMounted(loadAssignments)
-onBeforeUnmount(stopTimers)
+onBeforeUnmount(() => {
+  stopTimers()
+  resetLiveMarks()
+})
 </script>
 
 <template>
@@ -467,22 +519,44 @@ onBeforeUnmount(stopTimers)
 
   <p>
     Click the QR code to enlarge it. It refreshes automatically
-    every 5 seconds.
+    every 10 seconds.
   </p>
 </div>
 
           <div class="live-details">
             <div class="attendance-count">
               <span>✓</span>
-              <div>
-                <strong>{{ activeSession.presentCount }}</strong>
-                <p>
-                  {{
-                    activeSession.presentCount === 1
-                      ? 'student marked present'
-                      : 'students marked present'
-                  }}
-                </p>
+              <div class="attendance-copy">
+                <template v-if="displayedMark">
+                  <small class="live-mark-label">
+                    <span class="live-dot" aria-hidden="true"></span>
+                    LIVE · JUST MARKED PRESENT
+                  </small>
+                  <strong>{{ markedStudentName(displayedMark) }}</strong>
+                  <p>{{ displayedMark.studentCode }}</p>
+                </template>
+
+                <template v-else>
+                  <strong>{{ activeSession.presentCount }}</strong>
+                  <p>
+                    {{
+                      activeSession.presentCount === 1
+                        ? 'student marked present'
+                        : 'students marked present'
+                    }}
+                  </p>
+                </template>
+              </div>
+
+              <div class="attendance-badges">
+                <small class="session-live-indicator">
+                  <span class="live-dot" aria-hidden="true"></span>
+                  LIVE
+                </small>
+
+                <small v-if="displayedMark" class="present-total">
+                  {{ activeSession.presentCount }} present
+                </small>
               </div>
             </div>
 
@@ -929,16 +1003,86 @@ h2 {
   font-weight: 800;
 }
 
+.attendance-copy {
+  min-width: 0;
+}
+
 .attendance-count strong {
   display: block;
   color: #29434e;
   font-size: 28px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .attendance-count p {
   margin: 2px 0 0;
   color: #718087;
   font-size: 12px;
+}
+
+.attendance-copy p {
+  font-weight: 800;
+}
+
+.attendance-copy small {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 3px;
+  color: #087c73;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 1px;
+}
+
+.live-dot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: #df4c4c;
+  box-shadow: 0 0 0 3px rgba(223, 76, 76, 0.16);
+  animation: live-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes live-pulse {
+  50% {
+    opacity: 0.45;
+    transform: scale(0.8);
+  }
+}
+
+.present-total {
+  padding: 5px 8px;
+  border-radius: 999px;
+  color: #087c73;
+  background: rgba(255, 255, 255, 0.66);
+  font-size: 10px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.attendance-badges {
+  display: grid;
+  justify-items: end;
+  gap: 6px;
+  margin-left: auto;
+  align-self: flex-start;
+}
+
+.session-live-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 8px;
+  border-radius: 999px;
+  color: #bd3737;
+  background: #fff2f2;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.8px;
 }
 
 .info-card {

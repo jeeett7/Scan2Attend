@@ -181,9 +181,8 @@ router.post(
 
       const passwordHash = await bcrypt.hash(password, 12)
 
-      // "Delete" deactivates an account so its past attendance remains intact.
-      // If an admin adds the same inactive student again, restore that account
-      // rather than trying to insert a second user with the same email.
+      // Support any inactive student accounts left behind by older versions
+      // of the app, which used soft deletion.
       const [existingAccounts] = await connection.execute(
         `SELECT
            users.id AS userId,
@@ -314,30 +313,69 @@ router.delete(
       })
     }
 
+    let connection
+
     try {
-      const [result] = await dbPool.execute(
-        `UPDATE users
-         INNER JOIN students ON students.user_id = users.id
-         SET users.is_active = FALSE
-         WHERE students.id = ?`,
+      connection = await dbPool.getConnection()
+      await connection.beginTransaction()
+
+      const [students] = await connection.execute(
+        `SELECT id, user_id AS userId
+         FROM students
+         WHERE id = ?
+         FOR UPDATE`,
         [studentId]
       )
 
-      if (result.affectedRows === 0) {
+      if (students.length === 0) {
+        await connection.rollback()
         return response.status(404).json({
           message: 'Student not found.'
         })
       }
 
+      const userId = students[0].userId
+
+      await connection.execute(
+        `DELETE FROM attendance_records WHERE student_id = ?`,
+        [studentId]
+      )
+      await connection.execute(
+        `DELETE FROM student_subject_enrollments WHERE student_id = ?`,
+        [studentId]
+      )
+      await connection.execute(
+        `DELETE FROM enrollments WHERE student_id = ?`,
+        [studentId]
+      )
+      await connection.execute(
+        `DELETE FROM students WHERE id = ?`,
+        [studentId]
+      )
+      await connection.execute(
+        `DELETE FROM users WHERE id = ?`,
+        [userId]
+      )
+
+      await connection.commit()
+
       return response.json({
-        message: 'Student deactivated successfully.'
+        message: 'Student permanently deleted successfully.'
       })
     } catch (error) {
+      if (connection) {
+        await connection.rollback()
+      }
+
       console.error('Delete student error:', error)
 
       return response.status(500).json({
-        message: 'Could not deactivate the student.'
+        message: 'Could not permanently delete the student.'
       })
+    } finally {
+      if (connection) {
+        connection.release()
+      }
     }
   }
 )
@@ -401,7 +439,8 @@ router.post(
 
       const passwordHash = await bcrypt.hash(password, 12)
 
-      // Restore a previously deactivated teacher when the same email is used.
+      // Support any inactive teacher accounts left behind by older versions
+      // of the app, which used soft deletion.
       // This keeps historical assignments and attendance records valid.
       const [existingAccounts] = await connection.execute(
         `SELECT
@@ -532,28 +571,118 @@ router.delete(
       })
     }
 
+    let connection
+
     try {
-      const [result] = await dbPool.execute(
-        `UPDATE users
-         INNER JOIN teachers ON teachers.user_id = users.id
-         SET users.is_active = FALSE
-         WHERE teachers.id = ?`,
+      connection = await dbPool.getConnection()
+      await connection.beginTransaction()
+
+      const [teachers] = await connection.execute(
+        `SELECT id, user_id AS userId
+         FROM teachers
+         WHERE id = ?
+         FOR UPDATE`,
         [teacherId]
       )
 
-      if (result.affectedRows === 0) {
+      if (teachers.length === 0) {
+        await connection.rollback()
         return response.status(404).json({
           message: 'Teacher not found.'
         })
       }
 
+      const userId = teachers[0].userId
+
+      await connection.execute(
+        `DELETE attendance_scan_claims
+         FROM attendance_scan_claims
+         INNER JOIN attendance_sessions
+           ON attendance_sessions.id =
+             attendance_scan_claims.attendance_session_id
+         INNER JOIN teacher_assignments
+           ON teacher_assignments.id =
+             attendance_sessions.teacher_assignment_id
+         WHERE teacher_assignments.teacher_id = ?`,
+        [teacherId]
+      )
+      await connection.execute(
+        `DELETE attendance_device_marks
+         FROM attendance_device_marks
+         INNER JOIN attendance_sessions
+           ON attendance_sessions.id =
+             attendance_device_marks.attendance_session_id
+         INNER JOIN teacher_assignments
+           ON teacher_assignments.id =
+             attendance_sessions.teacher_assignment_id
+         WHERE teacher_assignments.teacher_id = ?`,
+        [teacherId]
+      )
+      await connection.execute(
+        `DELETE attendance_qr_tokens
+         FROM attendance_qr_tokens
+         INNER JOIN attendance_sessions
+           ON attendance_sessions.id =
+             attendance_qr_tokens.attendance_session_id
+         INNER JOIN teacher_assignments
+           ON teacher_assignments.id =
+             attendance_sessions.teacher_assignment_id
+         WHERE teacher_assignments.teacher_id = ?`,
+        [teacherId]
+      )
+      await connection.execute(
+        `DELETE attendance_records
+         FROM attendance_records
+         INNER JOIN attendance_sessions
+           ON attendance_sessions.id =
+             attendance_records.attendance_session_id
+         INNER JOIN teacher_assignments
+           ON teacher_assignments.id =
+             attendance_sessions.teacher_assignment_id
+         WHERE teacher_assignments.teacher_id = ?`,
+        [teacherId]
+      )
+      await connection.execute(
+        `DELETE attendance_sessions
+         FROM attendance_sessions
+         INNER JOIN teacher_assignments
+           ON teacher_assignments.id =
+             attendance_sessions.teacher_assignment_id
+         WHERE teacher_assignments.teacher_id = ?`,
+        [teacherId]
+      )
+      await connection.execute(
+        `DELETE FROM teacher_assignments WHERE teacher_id = ?`,
+        [teacherId]
+      )
+      await connection.execute(
+        `DELETE FROM teachers WHERE id = ?`,
+        [teacherId]
+      )
+      await connection.execute(
+        `DELETE FROM users WHERE id = ?`,
+        [userId]
+      )
+
+      await connection.commit()
+
       return response.json({
-        message: 'Teacher deactivated successfully.'
+        message: 'Teacher permanently deleted successfully.'
       })
     } catch (error) {
+      if (connection) {
+        await connection.rollback()
+      }
+
+      console.error('Delete teacher error:', error)
+
       return response.status(500).json({
-        message: 'Could not deactivate the teacher.'
+        message: 'Could not permanently delete the teacher.'
       })
+    } finally {
+      if (connection) {
+        connection.release()
+      }
     }
   }
 )

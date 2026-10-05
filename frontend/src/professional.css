@@ -1024,6 +1024,32 @@ td small {
   padding: 32px !important;
 }
 
+/* Keep the profile header full-width and lay the details/security cards out
+   together on larger screens. */
+.page:has(.profile-layout) .content {
+  flex: 1 1 auto !important;
+  width: auto !important;
+}
+
+.page:has(.profile-layout) .hero {
+  width: 100% !important;
+  max-width: none !important;
+}
+
+.page:has(.profile-layout) .profile-card,
+.page:has(.profile-layout) .password-panel {
+  max-width: none !important;
+}
+
+.page:has(.profile-layout) .profile-layout {
+  align-items: stretch !important;
+}
+
+.page:has(.profile-layout) .password-panel {
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+}
+
 @media (max-width: 760px) {
   .page:has(.login-card) {
     padding: 18px 14px 24px !important;
